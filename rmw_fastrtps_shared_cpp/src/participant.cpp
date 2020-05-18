@@ -34,6 +34,8 @@
 #include "fastrtps/subscriber/SubscriberListener.h"
 #include "fastrtps/subscriber/SampleInfo.h"
 
+#include "fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.h"
+
 #include "rcutils/filesystem.h"
 #include "rcutils/get_env.h"
 
@@ -50,6 +52,7 @@ using Locator_t = eprosima::fastrtps::rtps::Locator_t;
 using Participant = eprosima::fastrtps::Participant;
 using ParticipantAttributes = eprosima::fastrtps::ParticipantAttributes;
 using StatefulReader = eprosima::fastrtps::rtps::StatefulReader;
+using SharedMemTransportDescriptor = eprosima::fastdds::rtps::SharedMemTransportDescriptor;
 
 #if HAVE_SECURITY
 static
@@ -152,6 +155,15 @@ rmw_fastrtps_shared_cpp::create_participant(
 
   // Load default XML profile.
   Domain::getDefaultParticipantAttributes(participantAttrs);
+
+  // Create a descriptor for the new transport.
+  std::shared_ptr<SharedMemTransportDescriptor> shm_transport = std::make_shared<SharedMemTransportDescriptor>();
+
+  // Disable the built-in Transport Layer.
+  participantAttrs.rtps.useBuiltinTransports = false;
+
+  // Link the Transport Layer to the Participant.
+  participantAttrs.rtps.userTransports.push_back(shm_transport);
 
   if (localhost_only) {
     Locator_t local_network_interface_locator;
