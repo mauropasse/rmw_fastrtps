@@ -332,4 +332,19 @@ rmw_destroy_client(rmw_node_t * node, rmw_client_t * client)
   return rmw_fastrtps_shared_cpp::__rmw_destroy_client(
     eprosima_fastrtps_identifier, node, client);
 }
+
+
+rmw_ret_t
+rmw_client_set_listener_callback(
+  rmw_client_t * rmw_client,
+  rmw_listener_cb_t callback,
+  const void * user_data,
+  const void * client_handle)
+{
+  return rmw_fastrtps_shared_cpp::__rmw_client_set_listener_callback(
+    rmw_client,
+    callback,
+    user_data,
+    client_handle);
+}
 }  // extern "C"

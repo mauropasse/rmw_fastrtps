@@ -31,7 +31,7 @@
 #include "fastrtps/participant/Participant.h"
 #include "fastrtps/publisher/Publisher.h"
 #include "fastrtps/publisher/PublisherListener.h"
-
+#include "rmw/listener_event_types.h"
 #include "rcpputils/thread_safety_annotations.hpp"
 
 #include "rmw_fastrtps_shared_cpp/TypeSupport.hpp"
@@ -107,6 +107,16 @@ public:
             list.emplace_back(std::move(response));
             list_has_data_.store(true);
           }
+
+          // Add the client event to the event queue
+          std::unique_lock<std::mutex> lock_mutex(listener_callback_mutex_);
+
+          if(listener_callback_) {
+            listener_callback_(user_data_, { client_handle_, CLIENT_EVENT });
+          } else {
+            unread_count_++;
+          }
+
         }
       }
     }
@@ -164,6 +174,38 @@ public:
     info_->response_subscriber_matched_count_.store(publishers_.size());
   }
 
+  // Provide handlers to perform an action when a
+  // new event from this listener has ocurred
+  void
+  clientSetExecutorCallback(
+    const void * user_data,
+    rmw_listener_cb_t callback,
+    const void * client_handle)
+  {
+    std::unique_lock<std::mutex> lock_mutex(listener_callback_mutex_);
+
+    if(user_data && client_handle && callback)
+    {
+      user_data_ = user_data;
+      listener_callback_ = callback;
+      client_handle_ = client_handle;
+    } else {
+       // Unset callback: If any of the pointers is NULL, do not use callback.
+      user_data_ = nullptr;
+      listener_callback_ = nullptr;
+      client_handle_ = nullptr;
+      return;
+    }
+
+    // Push events arrived before setting the the executor callback
+    for(uint64_t i = 0; i < unread_count_; i++) {
+      listener_callback_(user_data_, { client_handle_, CLIENT_EVENT });
+    }
+
+    // Reset unread count
+    unread_count_ = 0;
+  }
+
 private:
   bool popResponse(CustomClientResponse & response) RCPPUTILS_TSA_REQUIRES(internalMutex_)
   {
@@ -183,6 +225,12 @@ private:
   std::mutex * conditionMutex_ RCPPUTILS_TSA_GUARDED_BY(internalMutex_);
   std::condition_variable * conditionVariable_ RCPPUTILS_TSA_GUARDED_BY(internalMutex_);
   std::set<eprosima::fastrtps::rtps::GUID_t> publishers_;
+
+  rmw_listener_cb_t listener_callback_{nullptr};
+  const void * client_handle_{nullptr};
+  const void * user_data_{nullptr};
+  std::mutex listener_callback_mutex_;
+  uint64_t unread_count_ = 0;
 };
 
 class ClientPubListener : public eprosima::fastrtps::PublisherListener

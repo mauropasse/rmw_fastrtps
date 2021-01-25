@@ -280,6 +280,16 @@ public:
           list.push_back(request);
           list_has_data_.store(true);
         }
+
+        // Add the service to the event queue
+        std::unique_lock<std::mutex> lock_mutex(listener_callback_mutex_);
+
+        if(listener_callback_) {
+          listener_callback_(user_data_, { service_handle_, SERVICE_EVENT });
+        } else {
+          unread_count_++;
+        }
+
       }
     }
   }
@@ -330,6 +340,38 @@ public:
     return list_has_data_.load();
   }
 
+  // Provide handlers to perform an action when a
+  // new event from this listener has ocurred
+  void
+  serviceSetExecutorCallback(
+    const void * user_data,
+    rmw_listener_cb_t callback,
+    const void * service_handle)
+  {
+    std::unique_lock<std::mutex> lock_mutex(listener_callback_mutex_);
+
+    if(user_data && service_handle && callback)
+    {
+      user_data_ = user_data;
+      listener_callback_ = callback;
+      service_handle_ = service_handle;
+    } else {
+       // Unset callback: If any of the pointers is NULL, do not use callback.
+      user_data_ = nullptr;
+      listener_callback_ = nullptr;
+      service_handle_ = nullptr;
+      return;
+    }
+
+    // Push events arrived before setting the the executor callback
+    for(uint64_t i = 0; i < unread_count_; i++) {
+      listener_callback_(user_data_, { service_handle_, SERVICE_EVENT });
+    }
+
+    // Reset unread count
+    unread_count_ = 0;
+  }
+
 private:
   CustomServiceInfo * info_;
   std::mutex internalMutex_;
@@ -337,6 +379,12 @@ private:
   std::atomic_bool list_has_data_;
   std::mutex * conditionMutex_ RCPPUTILS_TSA_GUARDED_BY(internalMutex_);
   std::condition_variable * conditionVariable_ RCPPUTILS_TSA_GUARDED_BY(internalMutex_);
+
+  rmw_listener_cb_t listener_callback_{nullptr};
+  const void * service_handle_{nullptr};
+  const void * user_data_{nullptr};
+  std::mutex listener_callback_mutex_;
+  uint64_t unread_count_ = 0;
 };
 
 #endif  // RMW_FASTRTPS_SHARED_CPP__CUSTOM_SERVICE_INFO_HPP_

@@ -41,4 +41,22 @@ __rmw_destroy_guard_condition(rmw_guard_condition_t * guard_condition)
 
   return RMW_RET_ERROR;
 }
+
+
+rmw_ret_t
+__rmw_guard_condition_set_listener_callback(
+  rmw_guard_condition_t * rmw_guard_condition,
+  rmw_listener_cb_t callback,
+  const void * user_data,
+  const void * guard_condition_handle,
+  bool use_previous_events)
+{
+  auto guard_condition = static_cast<GuardCondition *>(rmw_guard_condition->data);
+  guard_condition->guardConditionSetExecutorCallback(
+    user_data,
+    callback,
+    guard_condition_handle,
+    use_previous_events);
+  return RMW_RET_OK;
+}
 }  // namespace rmw_fastrtps_shared_cpp
